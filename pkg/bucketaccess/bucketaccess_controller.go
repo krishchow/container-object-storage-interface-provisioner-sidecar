@@ -39,8 +39,7 @@ import (
 )
 
 const (
-	CredentialsFilePath     = "CredentialsFilePath"
-	CredentialsFileContents = "CredentialsFileContents"
+	Credentials = "Credentials"
 )
 
 // BucketAccessListener manages Bucket objects
@@ -153,8 +152,7 @@ func (bal *BucketAccessListener) Add(ctx context.Context, inputBucketAccess *v1a
 		}
 
 		// if secret doesn't exist, create it
-		credentialsFileContents := rsp.CredentialsFileContents
-		credentialsFilePath := rsp.CredentialsFilePath
+		credentialsContents := rsp.Credentials
 
 		if _, err := bal.Secrets(ns).Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -162,8 +160,7 @@ func (bal *BucketAccessListener) Add(ctx context.Context, inputBucketAccess *v1a
 				Namespace: ns,
 			},
 			StringData: map[string]string{
-				CredentialsFilePath:     credentialsFilePath,
-				CredentialsFileContents: credentialsFileContents,
+				Credentials: credentialsContents,
 			},
 			Type: corev1.SecretTypeOpaque,
 		}, metav1.CreateOptions{}); err != nil {
