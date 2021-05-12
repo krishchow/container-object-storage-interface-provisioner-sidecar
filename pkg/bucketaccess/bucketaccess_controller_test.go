@@ -136,7 +136,6 @@ func TestAddBucketAccess(t *testing.T) {
 	policy := "policy1"
 	accountId := "account1"
 	credsContents := "credsContents"
-	credsFile := "credsFile"
 	ns := "testns"
 	mpc := struct{ fakespec.FakeProvisionerClient }{}
 
@@ -157,9 +156,8 @@ func TestAddBucketAccess(t *testing.T) {
 				opts ...grpc.CallOption) (*cosi.ProvisionerGrantBucketAccessResponse, error) {
 
 				return &cosi.ProvisionerGrantBucketAccessResponse{
-					AccountId:               accountId,
-					CredentialsFileContents: credsContents,
-					CredentialsFilePath:     credsFile,
+					AccountId:   accountId,
+					Credentials: credsContents,
 				}, nil
 			},
 		},
@@ -224,15 +222,10 @@ func TestAddBucketAccess(t *testing.T) {
 			t.Fatalf("minted secret creation failed: %v", err)
 		}
 
-		if secret.StringData["CredentialsFilePath"] != credsFile {
-			t.Errorf("Expected %s, got %s",
-				credsFile,
-				secret.StringData["CredentialsFilePath"])
-		}
-		if secret.StringData["CredentialsFileContents"] != credsContents {
+		if secret.StringData["Credentials"] != credsContents {
 			t.Errorf("Expected %s, got %s",
 				credsContents,
-				secret.StringData["CredentialsFileContents"])
+				secret.StringData["Credentials"])
 		}
 	}
 }

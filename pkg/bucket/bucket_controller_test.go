@@ -17,6 +17,7 @@ package bucket
 
 import (
 	"context"
+	corev1 "k8s.io/api/core/v1"
 	"reflect"
 	"testing"
 
@@ -130,9 +131,10 @@ func TestBucketDeletion(t *testing.T) {
 	mpc := struct{ fakespec.FakeProvisionerClient }{}
 
 	testCases := []struct {
-		name       string
-		setFields  func(*v1alpha1.Bucket)
-		deleteFunc func(ctx context.Context,
+		name           string
+		setFields      func(*v1alpha1.Bucket)
+		deletionPolicy v1alpha1.DeletionPolicy
+		deleteFunc     func(ctx context.Context,
 			in *cosi.ProvisionerDeleteBucketRequest,
 			opts ...grpc.CallOption) (*cosi.ProvisionerDeleteBucketResponse, error)
 	}{
@@ -141,6 +143,7 @@ func TestBucketDeletion(t *testing.T) {
 			setFields: func(b *v1alpha1.Bucket) {
 				b.Status.BucketID = bucketId
 			},
+			deletionPolicy: v1alpha1.DeletionPolicyForceDelete,
 			deleteFunc: func(ctx context.Context,
 				req *cosi.ProvisionerDeleteBucketRequest,
 				opts ...grpc.CallOption) (*cosi.ProvisionerDeleteBucketResponse, error) {
@@ -154,17 +157,39 @@ func TestBucketDeletion(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		br := v1alpha1.BucketRequest{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "bucketRequest",
+				Namespace: "namespace",
+			},
+			Spec:   v1alpha1.BucketRequestSpec{},
+			Status: v1alpha1.BucketRequestStatus{},
+		}
 		b := v1alpha1.Bucket{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "bucket",
+			},
 			Spec: v1alpha1.BucketSpec{
-				Provisioner: provisioner,
+				Provisioner:    provisioner,
+				DeletionPolicy: tc.deletionPolicy,
+				BucketRequest:  &corev1.ObjectReference{Name: br.Name, Namespace: br.Namespace},
 			},
 			Status: v1alpha1.BucketStatus{
 				BucketAvailable: true,
 			},
 		}
+		ba := v1alpha1.BucketAccess{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "bucketAccess",
+			},
+			Spec: v1alpha1.BucketAccessSpec{
+				BucketName: b.Name,
+			},
+			Status: v1alpha1.BucketAccessStatus{},
+		}
 
 		ctx := context.TODO()
-		client := fakebucketclientset.NewSimpleClientset(&b)
+		client := fakebucketclientset.NewSimpleClientset(&br, &ba, &b)
 		mpc.FakeProvisionerDeleteBucket = tc.deleteFunc
 		bl := BucketListener{
 			provisionerName:   provisioner,

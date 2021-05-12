@@ -17,6 +17,7 @@ package bucket
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -152,27 +153,49 @@ func (b *BucketListener) Delete(ctx context.Context, inputBucket *v1alpha1.Bucke
 	)
 
 	if !strings.EqualFold(bucket.Spec.Provisioner, b.provisionerName) {
-		klog.V(5).InfoS("Skipping bucket for provisiner",
+		klog.V(5).InfoS("Skipping bucket for provisioner",
 			"bucket", bucket.Name,
 			"provisioner", bucket.Spec.Provisioner,
 		)
 		return nil
 	}
 
-	req := &cosi.ProvisionerDeleteBucketRequest{
-		BucketId: bucket.Status.BucketID,
+	if bucket.Spec.BucketRequest == nil {
+		klog.V(5).InfoS("Cannot delete brownfield bucket",
+			"bucket", bucket.Name,
+		)
+		return nil
 	}
 
-	if _, err := b.provisionerClient.ProvisionerDeleteBucket(ctx, req); err != nil {
-		if status.Code(err) != codes.NotFound {
-			klog.ErrorS(err, "Failed to delete bucket",
-				"bucket", bucket.Name,
-			)
+	switch bucket.Spec.DeletionPolicy {
+	case v1alpha1.DeletionPolicyRetain:
+		// No deletion in this case
+		break
+	case v1alpha1.DeletionPolicyDelete:
+		bas, err := b.bucketClient.ObjectstorageV1alpha1().BucketAccesses().List(ctx, metav1.ListOptions{})
+		if err != nil {
 			return err
 		}
-	}
+		for _, ba := range bas.Items {
+			if ba.Spec.BucketName == bucket.Name {
+				return fmt.Errorf("deletion failed: bucket access %s refers to bucket", ba.Name)
+			}
+		}
+		fallthrough
+	case v1alpha1.DeletionPolicyForceDelete:
+		req := &cosi.ProvisionerDeleteBucketRequest{
+			BucketId: bucket.Status.BucketID,
+		}
 
-	// TODO, check bucket.Spec.DeletionPolicy
+		if _, err := b.provisionerClient.ProvisionerDeleteBucket(ctx, req); err != nil {
+			if status.Code(err) != codes.NotFound {
+				klog.ErrorS(err, "Failed to delete bucket",
+					"bucket", bucket.Name,
+				)
+				return err
+			}
+		}
+	}
 
 	bucket.Status.BucketAvailable = false
 
